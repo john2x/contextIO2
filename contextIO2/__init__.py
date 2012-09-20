@@ -1,4 +1,9 @@
-import json
+try:
+    import json
+except ImportError:
+    # JSON module introduced in Python 2.6, Google AppEngine still
+    # uses Python 2.5
+    from django.utils import simplejson as json
 import re
 from urllib import urlencode, quote
 from oauth2 import Request, Consumer, Client, SignatureMethod_HMAC_SHA1 as sha1
@@ -6,7 +11,7 @@ from oauth2 import Request, Consumer, Client, SignatureMethod_HMAC_SHA1 as sha1
 from util import as_bool, as_datetime, process_person_info, uncamelize
 
 class ContextIO(object):
-    url_base = "https://api-preview.context.io"
+    url_base = "https://api.context.io"
 
     def __init__(self, consumer_key, consumer_secret):
         self.consumer = Consumer(key=consumer_key, secret=consumer_secret)
@@ -19,7 +24,7 @@ class ContextIO(object):
         response, body = self.request(url, method, params, headers)
         status = int(response['status'])
 
-        if status == 200:
+        if status >= 200 and status < 300:
             body = json.loads(body)
             return body
 
@@ -27,17 +32,22 @@ class ContextIO(object):
             self.handle_request_error(response, body)
 
     def request(self, url, method, params, headers):
-        if params:
+        body = ''
+        if method == 'GET' and params:
             url += '?' + urlencode(params)
+        elif method == 'POST' and params:
+            body = urlencode(params)
+        print method + ' ' + url        
+        return self.client.request(url, method, headers=headers, body=body)
 
-        print "{method} {url}".format(url=url, method=method)
-        return self.client.request(url, method, headers=headers)
+    def get_accounts(self, **params):
+        params = Resource.sanitize_params(params, ['email', 'status', 'status_ok', 'limit', 'offset'])
+        return [Account(self, obj) for obj in self.request_uri('accounts', params=params)]
 
-    def get_accounts(self):
-        return [Account(self, obj) for obj in self.request_uri('accounts')]
-
-    def post_account(self, email, first_name=None, last_name=None):
-        pass
+    def post_account(self, email, **params):
+        params = Resource.sanitize_params(params, ['first_name', 'last_name'])
+        params['email'] = email
+        return Account(self, self.request_uri('accounts', method="POST", params=params))
 
     def delete_account(self, account_id):
         pass
@@ -46,16 +56,11 @@ class ContextIO(object):
         pass
 
     def handle_request_error(self, response, body):
-        messages = []
         try:
             body = json.loads(body)
-            for message in body['messages']:
-                if message['type'] == 'error':
-                    messages.append("error {0}".format(message['code']))
-            raise Exception('HTTP {status}: {message}'.format(status=response['status'], message=', '.join(messages)))
-
+            raise Exception('HTTP %(status)s - %(type)s %(code)s: %(message)s' % { 'status': response['status'], 'type': body['type'], 'code': body['code'], 'message': body['value']})
         except ValueError:
-            raise Exception('HTTP {status}: {body}'.format(status=response['status'], body=body))
+            raise Exception('HTTP %(status)s: %(body)s' % {'status':response['status'], 'body':body})
 
 class Resource(object):
     def __init__(self, parent, base_uri, defn):
@@ -68,7 +73,10 @@ class Resource(object):
                 setattr(self, k, None)
 
         self.parent = parent
-        self.base_uri = quote(base_uri.format(**defn))
+        try:
+            self.base_uri = quote(base_uri.format(**defn))
+        except:
+            self.base_uri = quote(base_uri.replace('{','%(').replace('}',')s') % defn)
 
     def uri_for(self, *elems):
         return '/'.join([self.base_uri] + list(elems))
@@ -112,6 +120,16 @@ class Account(Resource):
     def get_sources(self):
         return self.request_uri('sources')
 
+    def post_source(self, email, server, username, use_ssl=True, port='993', type='imap', **params):
+        params = Resource.sanitize_params(params, ['service_level', 'sync_period', 'password', 'provider_token', 'provider_token_secret', 'provider_consumer_key'])
+        params['email'] = email
+        params['server'] = server
+        params['username'] = username
+        params['port'] = port
+        params['type'] = type
+        params['use_ssl'] = '1' if use_ssl is True else '0' 
+        return self.request_uri('sources', method='POST', params=params)
+
     def post_sync(self):
         pass
 
@@ -126,25 +144,7 @@ class Contact(Resource):
 
     def get_files(self, **params):
         params = Resource.sanitize_params(params, ['limit', 'offset'])
-        body = self.request_uri('files', params=params)
-
-        result = []
-        for obj in body:
-            file_name = obj.get('file_name')
-            occurrences = []
-            for o in obj.get('occurrences'):
-                occurrences.append({
-                    'file': File(self.parent, o),
-                    'message': Message(self.parent, o)
-                })
-
-            result.append({
-                'file_name': obj.get('file_name'),
-                'latest_date': as_datetime(obj.get('latestDate')),
-                'occurrences': occurrences
-            })
-
-        return result
+        return self.request_uri('files', params=params)
 
     def get_messages(self, **params):
         params = Resource.sanitize_params(params, ['limit', 'offset'])
