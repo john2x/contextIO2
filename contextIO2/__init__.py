@@ -117,6 +117,14 @@ class Account(Resource):
 
         return [Message(self, obj) for obj in self.request_uri('messages', params=params)]
 
+    def get_message(self, message_id, **params):
+        params = Resource.sanitize_params(params, ['include_body', 'include_headers', 'include_flags', 'body_type'])
+        for key in ['include_headers', 'include_body']:
+            if key in params:
+                params[key] = '1' if params[key] is True else '0'
+        obj = self.request_uri('messages/%s' % message_id, params=params)
+        return Message(self, obj)
+
     def get_sources(self):
         return self.request_uri('sources')
 
