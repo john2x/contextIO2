@@ -10,6 +10,11 @@ from oauth2 import Request, Consumer, Client, SignatureMethod_HMAC_SHA1 as sha1
 
 from util import as_bool, as_datetime, process_person_info, uncamelize
 
+class RequestError(Exception):
+    def __init__(self, status_code, message):
+        self.status_code = status_code
+        return super(RequestError, self).__init__(message)
+
 class ContextIO(object):
     url_base = "https://api.context.io"
 
@@ -56,11 +61,12 @@ class ContextIO(object):
         pass
 
     def handle_request_error(self, response, body):
+        status_code = int(response['status'])
         try:
             body = json.loads(body)
-            raise Exception('HTTP %(status)s - %(type)s %(code)s: %(message)s' % { 'status': response['status'], 'type': body['type'], 'code': body['code'], 'message': body['value']})
-        except ValueError:
-            raise Exception('HTTP %(status)s: %(body)s' % {'status':response['status'], 'body':body})
+            raise RequestError(status_code, 'HTTP %(status)s - %(type)s %(code)s: %(message)s' % { 'status': response['status'], 'type': body['type'], 'code': body['code'], 'message': body['value']})
+        except (ValueError, TypeError):
+            raise RequestError(status_code, 'HTTP %(status)s: %(body)s' % {'status':response['status'], 'body':body})
 
 class Resource(object):
     def __init__(self, parent, base_uri, defn):
