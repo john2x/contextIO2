@@ -60,6 +60,21 @@ class ContextIO(object):
     def put_account(self, first_name=None, last_name=None):
         pass
 
+    def get_connect_tokens(self):
+        return [ConnectToken(self, obj) for obj in self.request_uri('connect_tokens')]
+
+    def get_connect_token(self, token):
+        obj = self.request_uri('connect_tokens/%s' % token)
+        return ConnectToken(self, obj)
+
+    def post_connect_token(self, callback_url, **params):
+        params = Resource.sanitize_params(params, ['first_name', 'last_name'])
+        params['callback_url'] = callback_url
+        resp = self.request_uri('connect_tokens', method='POST', params=params)
+        token = resp['token']
+        redirect_url = resp['browser_redirect_url']
+        return (token, redirect_url)
+
     def handle_request_error(self, response, body):
         status_code = int(response['status'])
         try:
@@ -90,7 +105,7 @@ class Resource(object):
     def request_uri(self, uri_elems, method="GET", params={}):
         uri = self.uri_for(uri_elems)
         return self.parent.request_uri(uri, method=method, params=params)
-        
+
     @staticmethod
     def sanitize_params(params, clean_keys):
         return dict((k, params[k]) for k in clean_keys if k in params)
@@ -269,3 +284,12 @@ class Message(Resource):
         if self.thread is None:
             self.thread = self.request_uri('thread')
         return self.thread
+
+class ConnectToken(Resource):
+    keys = ['token', 'email', 'created', 'used', 'callback_url', 'service_level', 'first_name', 'last_name', 'account']
+
+    def __init__(self, parent, defn):
+        super(ConnectToken, self).__init__(parent, 'connect_tokens/{token}', defn)
+        if defn['account']:
+            self.account = Account(self.parent, defn['account'])
+
