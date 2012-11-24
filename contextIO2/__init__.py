@@ -42,7 +42,7 @@ class ContextIO(object):
             url += '?' + urlencode(params)
         elif method == 'POST' and params:
             body = urlencode(params)
-        print method + ' ' + url        
+        print method + ' ' + url
         return self.client.request(url, method, headers=headers, body=body)
 
     def get_accounts(self, **params):
@@ -68,7 +68,8 @@ class ContextIO(object):
         return ConnectToken(self, obj)
 
     def post_connect_token(self, callback_url, **params):
-        params = Resource.sanitize_params(params, ['first_name', 'last_name'])
+        params = Resource.sanitize_params(params, ['service_level', 'email', 'first_name', 'last_name',
+                                                   'source_callback_url', 'source_sync_flags', 'source_raw_file_list'])
         params['callback_url'] = callback_url
         resp = self.request_uri('connect_tokens', method='POST', params=params)
         token = resp['token']
