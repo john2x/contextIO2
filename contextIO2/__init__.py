@@ -24,7 +24,11 @@ class ContextIO(object):
         self.client.set_signature_method(sha1())
         self.base_uri = '2.0'
 
-    def request_uri(self, uri, method="GET", params={}, headers={}):
+    def request_uri(self, uri, method="GET", params=None, headers=None):
+        if params is None:
+            params = {}
+        if headers is None:
+            headers = {}
         url = '/'.join((self.url_base, self.base_uri, uri))
         response, body = self.request(url, method, params, headers)
         status = int(response['status'])
@@ -103,7 +107,9 @@ class Resource(object):
     def uri_for(self, *elems):
         return '/'.join([self.base_uri] + list(elems))
 
-    def request_uri(self, uri_elems, method="GET", params={}):
+    def request_uri(self, uri_elems, method="GET", params=None):
+        if params is None:
+            params = {}
         uri = self.uri_for(uri_elems)
         return self.parent.request_uri(uri, method=method, params=params)
 
