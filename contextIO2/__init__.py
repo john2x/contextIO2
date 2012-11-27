@@ -34,9 +34,11 @@ class ContextIO(object):
         status = int(response['status'])
 
         if status >= 200 and status < 300:
+            # file content doesn't return json
+            if re.match(r'accounts/\w+/files/\w+/content', uri):
+                return body
             body = json.loads(body)
             return body
-
         else:
             self.handle_request_error(response, body)
 
@@ -136,6 +138,10 @@ class Account(Resource):
     def get_files(self, **params):
         params = Resource.sanitize_params(params, ['name', 'email', 'to', 'from', 'cc', 'bcc', 'date_before', 'date_after', 'indexed_before', 'indexed_after', 'group_by_revisions', 'limit', 'offset'])
         return [File(self, obj) for obj in self.request_uri('files', params=params)]
+
+    def get_file(self, file_id):
+        obj = self.request_uri('files/%s' % file_id)
+        return File(self, obj)
 
     def get_messages(self, **params):
         params = Resource.sanitize_params(params, ['subject', 'email', 'to', 'from', 'cc', 'bcc', 'date_before', 'date_after', 'indexed_before', 'indexed_after', 'include_body', 'include_headers', 'body_type', 'limit', 'offset'])
