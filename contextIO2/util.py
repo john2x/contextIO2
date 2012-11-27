@@ -29,10 +29,7 @@ def as_datetime(v):
         return datetime.fromtimestamp(v)
 
 def process_person_info(parent, person_info, addresses):
-    try:
-        from contextIO2 import Contact
-    except ImportError:
-        from __init__ import Contact
+    from contextIO2 import Contact
     contacts = {}
     to_addrs = []
     to_contacts = []
