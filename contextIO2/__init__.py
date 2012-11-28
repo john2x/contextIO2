@@ -172,6 +172,9 @@ class Account(Resource):
         params['use_ssl'] = '1' if use_ssl is True else '0' 
         return self.request_uri('sources', method='POST', params=params)
 
+    def get_sync(self):
+        return self.request_uri('sync')
+
     def post_sync(self):
         return self.request_uri('sync', method='POST')
 
