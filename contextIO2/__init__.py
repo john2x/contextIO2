@@ -173,7 +173,7 @@ class Account(Resource):
         return self.request_uri('sources', method='POST', params=params)
 
     def post_sync(self):
-        pass
+        return self.request_uri('sync', method='POST')
 
     def get_webhooks(self):
         return self.request_uri('webhooks')
