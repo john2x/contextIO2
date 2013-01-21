@@ -18,9 +18,9 @@ class RequestError(Exception):
 class ContextIO(object):
     url_base = "https://api.context.io"
 
-    def __init__(self, consumer_key, consumer_secret):
+    def __init__(self, consumer_key, consumer_secret, timeout=None):
         self.consumer = Consumer(key=consumer_key, secret=consumer_secret)
-        self.client = Client(self.consumer)
+        self.client = Client(self.consumer, timeout=timeout)
         self.client.set_signature_method(sha1())
         self.base_uri = '2.0'
 
@@ -36,6 +36,9 @@ class ContextIO(object):
         if status >= 200 and status < 300:
             # file content doesn't return json
             if re.match(r'accounts/\w+/files/\w+/content', uri):
+                return body
+            # message source doesn't return json
+            if re.match(r'accounts/\w+/messages/\w+/source', uri):
                 return body
             body = json.loads(body)
             return body
@@ -87,7 +90,7 @@ class ContextIO(object):
         try:
             body = json.loads(body)
             raise RequestError(status_code, 'HTTP %(status)s - %(type)s %(code)s: %(message)s' % { 'status': response['status'], 'type': body['type'], 'code': body['code'], 'message': body['value']})
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, KeyError):
             raise RequestError(status_code, 'HTTP %(status)s: %(body)s' % {'status':response['status'], 'body':body})
 
 class Resource(object):
@@ -233,12 +236,35 @@ class File(Resource):
     def get_revisions(self):
         return self.request_uri('revisions')
 
+class Thread(Resource):
+    keys = ['email_message_ids', 'person_info', 'messages']
+    email_message_ids = None
+    messages = None
+
+    def __init__(self, parent, defn):
+        defn['message_id'] = parent.message_id
+        super(Thread, self).__init__(parent, 'messages/{message_id}/thread', defn)
+        self.messages = None
+        self.person_info = parent.person_info
+        self.email_message_ids = defn['email_message_ids']
+        self.get_messages(defn['messages'])
+
+    def get_messages(self, messages):
+        if self.messages is None:
+            self.messages = []
+            for message in messages:
+                self.messages.append(Message(self.parent.parent, message))
+            for message in self.messages:
+                message.thread = self
+        return self.messages
+
 class Message(Resource):
     keys = ['body', 'headers', 'date', 'subject', 'addresses', 'files', 'message_id', 'email_message_id', 'gmail_message_id', 'gmail_thread_id', 'person_info']
     body = None
     flags = None
     headers = None
     thread = None
+    source = None
 
     def __init__(self, parent, defn):
         super(Message, self).__init__(parent, 'messages/{message_id}', defn)
@@ -292,13 +318,17 @@ class Message(Resource):
 
     def get_headers(self):
         if self.headers is None:
-            response = self.request_uri('headers')
-            self.process_headers(response)
+            self.headers = self.request_uri('headers')
         return self.headers
+
+    def get_source(self):
+        if self.source is None:
+            self.source = self.request_uri('source')
+        return self.source
 
     def get_thread(self):
         if self.thread is None:
-            self.thread = self.request_uri('thread')
+            self.thread = Thread(self, self.request_uri('thread'))
         return self.thread
 
 class ConnectToken(Resource):
