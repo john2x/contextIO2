@@ -147,10 +147,10 @@ class Account(Resource):
         return File(self, obj)
 
     def get_messages(self, **params):
-        params = Resource.sanitize_params(params, ['subject', 'email', 'to', 'from', 'cc', 'bcc', 'date_before', 'date_after', 'indexed_before', 'indexed_after', 'include_body', 'include_headers', 'body_type', 'limit', 'offset'])
+        params = Resource.sanitize_params(params, ['subject', 'email', 'to', 'from', 'cc', 'bcc', 'date_before', 'date_after', 'indexed_before', 'indexed_after', 'include_body', 'include_headers', 'body_type', 'limit', 'offset', 'folder'])
         for key in ['include_headers', 'include_body']:
             if key in params:
-                params[key] = '1' if params[key] is True else '0' 
+                params[key] = '1' if params[key] is True else '0'
 
         return [Message(self, obj) for obj in self.request_uri('messages', params=params)]
 
@@ -172,8 +172,15 @@ class Account(Resource):
         params['username'] = username
         params['port'] = port
         params['type'] = type
-        params['use_ssl'] = '1' if use_ssl is True else '0' 
+        params['use_ssl'] = '1' if use_ssl is True else '0'
         return self.request_uri('sources', method='POST', params=params)
+
+    def get_folders(self, label='0'):
+        return self.request_uri('sources/%s/folders' % label)
+
+    def put_folder(self, label, folder_path, **params):
+        params = Resource.sanitize_params(params, ['delim'])
+        return self.request_uri('sources/%s/folders/%s' % (label, folder_path), method='PUT', params=params)
 
     def get_sync(self):
         return self.request_uri('sync')
