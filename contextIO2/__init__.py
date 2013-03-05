@@ -366,7 +366,7 @@ class Message(Resource):
         data = []
         for f in folders:
             if isinstance(f, Folder):
-                if f.name is None or f.symbolic_name is None:
+                if f.name is None and f.symbolic_name is None:
                     continue
                 if f.name is None:
                     data.append({'symbolic_name': f.symbolic_name})
@@ -407,7 +407,13 @@ class Folder(Resource):
             if key in params:
                 params[key] = '1' if params[key] is True else '0'
 
-        messages = [Message(self.parent, obj) for obj in self.request_uri('messages', params=params)]
-        self.messages = messages
+        try:
+            messages = [Message(self.parent, obj) for obj in self.request_uri('messages', params=params)]
+            self.messages = messages
+        except RequestError, e:
+            if e.status_code == 503:
+                self.messages = []
+            else:
+                raise e
         return self.messages
 
