@@ -48,9 +48,10 @@ def process_person_info(parent, person_info, addresses):
     for addr, d in person_info.items():
         info = {
             'email': addr,
-            'thumbnail': d.get('thumbnail'),
-            'name': d.get('name')
         }
+        if d:
+            info['thumbnail'] = d.get('thumbnail')
+            info['name'] = d.get('name')
         c = Contact(parent, info)
         contacts.setdefault(addr, c)
 
