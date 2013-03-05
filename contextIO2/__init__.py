@@ -24,13 +24,13 @@ class ContextIO(object):
         self.client.set_signature_method(sha1())
         self.base_uri = '2.0'
 
-    def request_uri(self, uri, method="GET", params=None, headers=None):
+    def request_uri(self, uri, method="GET", params=None, headers=None, data={}):
         if params is None:
             params = {}
         if headers is None:
             headers = {}
         url = '/'.join((self.url_base, self.base_uri, uri))
-        response, body = self.request(url, method, params, headers)
+        response, body = self.request(url, method, params, headers, data=data)
         status = int(response['status'])
 
         if status >= 200 and status < 300:
@@ -45,12 +45,14 @@ class ContextIO(object):
         else:
             self.handle_request_error(response, body)
 
-    def request(self, url, method, params, headers):
+    def request(self, url, method, params, headers, data=''):
         body = ''
         if method == 'GET' and params:
             url += '?' + urlencode(params)
         elif method == 'POST' and params:
-            body = urlencode(params)
+            body = urlencode(params, doseq=True)
+        if data:
+            body = json.dumps(data)
         print method + ' ' + url
         return self.client.request(url, method, headers=headers, body=body)
 
@@ -112,11 +114,11 @@ class Resource(object):
     def uri_for(self, *elems):
         return '/'.join([self.base_uri] + list(elems))
 
-    def request_uri(self, uri_elems, method="GET", params=None):
+    def request_uri(self, uri_elems, method="GET", params=None, data=None):
         if params is None:
             params = {}
         uri = self.uri_for(uri_elems)
-        return self.parent.request_uri(uri, method=method, params=params)
+        return self.parent.request_uri(uri, method=method, params=params, data=data)
 
     @staticmethod
     def sanitize_params(params, clean_keys):
@@ -176,7 +178,7 @@ class Account(Resource):
         return self.request_uri('sources', method='POST', params=params)
 
     def get_folders(self, label='0'):
-        return self.request_uri('sources/%s/folders' % label)
+        return [Folder(self, obj, label=label) for obj in self.request_uri('sources/%s/folders' % label)]
 
     def put_folder(self, label, folder_path, **params):
         params = Resource.sanitize_params(params, ['delim'])
@@ -272,6 +274,7 @@ class Message(Resource):
     headers = None
     thread = None
     source = None
+    folders = None
 
     def __init__(self, parent, defn):
         super(Message, self).__init__(parent, 'messages/{message_id}', defn)
@@ -312,7 +315,6 @@ class Message(Resource):
                     v = self.headers[key]
                     self.headers[key] = [v] + [value]
 
-
     def get_body(self):
         if self.body is None:
             self.body = self.request_uri('body')
@@ -338,6 +340,44 @@ class Message(Resource):
             self.thread = Thread(self, self.request_uri('thread'))
         return self.thread
 
+    def get_folders(self):
+        folders = self.request_uri('folders')
+        folders = [Folder(self.parent, obj) for obj in folders]
+        self.folders = folders
+        return folders
+
+    def edit_folders(self, add=None, remove=None):
+        if add is None:
+            add = []
+        if remove is None:
+            remove = []
+        if not isinstance(add, list):
+            add = [add]
+        if not isinstance(remove, list):
+            remove = [remove]
+        params = {
+            'add[]': add,
+            'remove[]': remove
+        }
+        params = Resource.sanitize_params(params, ['add[]', 'remove[]'])
+        self.request_uri('folders', method='POST', params=params)
+
+    def set_folders(self, folders):
+        data = []
+        for f in folders:
+            if isinstance(f, Folder):
+                if f.name is None or f.symbolic_name is None:
+                    continue
+                if f.name is None:
+                    data.append({'symbolic_name': f.symbolic_name})
+                else:
+                    data.append({'name': f.name})
+            elif isinstance(f, str):
+                data.append({'name': f})
+            else:
+                data.append(f)
+        self.request_uri('folders', method='PUT', data=data)
+
 class ConnectToken(Resource):
     keys = ['token', 'email', 'created', 'used', 'callback_url', 'service_level', 'first_name', 'last_name', 'account']
 
@@ -345,4 +385,29 @@ class ConnectToken(Resource):
         super(ConnectToken, self).__init__(parent, 'connect_tokens/{token}', defn)
         if defn['account']:
             self.account = Account(self.parent, defn['account'])
+
+class Folder(Resource):
+    keys = ['name', 'attributes', 'delim', 'nb_messages', 'nb_unseen_messages', 'symbolic_name']
+    name = None
+    symbolic_name = None
+    delim = None
+    attributes = None
+    nb_messages = None
+    nb_unseen_messages = None
+    label = None
+    messages = None
+
+    def __init__(self, parent, defn, label='0'):
+        defn['label'] = label
+        super(Folder, self).__init__(parent, 'sources/{label}/folders/{name}', defn)
+
+    def get_messages(self, **params):
+        params = Resource.sanitize_params(params, ['subject', 'email', 'to', 'from', 'cc', 'bcc', 'date_before', 'date_after', 'indexed_before', 'indexed_after', 'include_body', 'include_headers', 'body_type', 'limit', 'offset', 'folder'])
+        for key in ['include_headers', 'include_body']:
+            if key in params:
+                params[key] = '1' if params[key] is True else '0'
+
+        messages = [Message(self.parent, obj) for obj in self.request_uri('messages', params=params)]
+        self.messages = messages
+        return self.messages
 
