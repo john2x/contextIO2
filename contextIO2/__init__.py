@@ -60,6 +60,9 @@ class ContextIO(object):
         params = Resource.sanitize_params(params, ['email', 'status', 'status_ok', 'limit', 'offset'])
         return [Account(self, obj) for obj in self.request_uri('accounts', params=params)]
 
+    def get_account(self, account_id):
+        return Account(self, self.request_uri('accounts/%s' % account_id))
+
     def post_account(self, email, **params):
         params = Resource.sanitize_params(params, ['first_name', 'last_name'])
         params['email'] = email
