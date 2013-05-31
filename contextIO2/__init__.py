@@ -260,6 +260,8 @@ class Thread(Resource):
         self.person_info = parent.person_info
         self.email_message_ids = defn['email_message_ids']
         self.get_messages(defn['messages'])
+        if 'files' in defn:
+            self.files = [File(self.parent, f) for f in defn['files']]
 
     def get_messages(self, messages):
         if self.messages is None:
