@@ -260,6 +260,7 @@ class Thread(Resource):
         self.person_info = parent.person_info
         self.email_message_ids = defn['email_message_ids']
         self.get_messages(defn['messages'])
+        self.files = []
         if 'files' in defn:
             self.files = [File(self.parent, f) for f in defn['files']]
 
@@ -292,6 +293,7 @@ class Message(Resource):
         }
         self.date = as_datetime(self.date)
 
+        self.files = []
         if 'files' in defn:
             self.files = [File(self.parent, f) for f in defn['files']]
 
